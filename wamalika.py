@@ -59,6 +59,8 @@ try: import tweepy; TWEEPY_AVAILABLE = True
 except: TWEEPY_AVAILABLE = False
 try: from PIL import Image, ImageDraw, ImageFont; PIL_AVAILABLE = True
 except: PIL_AVAILABLE = False
+try: from textblob import TextBlob; TEXTBLOB_AVAILABLE = True
+except: TEXTBLOB_AVAILABLE = False
 
 # ============================================
 # 📂 STORAGE
