@@ -440,6 +440,71 @@ def dynamic_volatility_sizing(data, base_lot):
     factor = normalizer / (vol + 0.001)
     factor = max(0.3, min(2.0, factor))
     return max(100, int(base_lot * factor))
+def fetch_forex_news():
+    """Pata habari za forex kutoka ForexFactory RSS."""
+    if not FEEDPARSER_AVAILABLE:
+        return []
+    try:
+        feed = feedparser.parse("https://www.forexfactory.com/news/rss")
+        return [entry.title for entry in feed.entries[:10]]
+    except:
+        return []
+
+def news_polarity(symbol):
+    """Hesabu polarity ya habari kwa kutumia TextBlob."""
+    if not TEXTBLOB_AVAILABLE:
+        return 0.0
+    headlines = fetch_forex_news()
+    if not headlines:
+        return 0.0
+    relevant = [h for h in headlines if symbol[:3].upper() in h.upper() or symbol[3:].upper() in h.upper()]
+    if not relevant:
+        return 0.0
+    polarities = [TextBlob(h).sentiment.polarity for h in relevant]
+    return mean(polarities)
+
+def twitter_sentiment(symbol):
+    """Pata hisia za Twitter kuhusu sarafu."""
+    if not TWEEPY_AVAILABLE or not TWITTER_BEARER_TOKEN:
+        return "neutral"
+    try:
+        client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
+        query = f"({symbol[:3]} {symbol[3:]}) (bullish OR bearish) -is:retweet"
+        tweets = client.search_recent_tweets(query=query, max_results=10)
+        bullish = 0
+        for tweet in tweets.data or []:
+            if "bullish" in tweet.text.lower():
+                bullish += 1
+            elif "bearish" in tweet.text.lower():
+                bullish -= 1
+        if bullish > 2:
+            return "bullish"
+        elif bullish < -2:
+            return "bearish"
+        else:
+            return "neutral"
+    except:
+        return "neutral"
+
+def sentiment_oscillator(symbol):
+    """Unganisha technical, twitter, na news sentiment kuwa -100..100."""
+    data = fetch_forex_data(symbol, "15min", 100)
+    if not data:
+        return 0
+    res = analyze_market(data, symbol)
+    tech_score = res.get("score", 0)
+
+    tw = twitter_sentiment(symbol)
+    tw_score = 50 if tw == "bullish" else (-50 if tw == "bearish" else 0)
+
+    npol = news_polarity(symbol) * 100
+
+    SENTIMENT_WEIGHTS = {"technical": 0.5, "twitter": 0.2, "news_polarity": 0.3}
+    oscillator = (SENTIMENT_WEIGHTS["technical"] * tech_score +
+                  SENTIMENT_WEIGHTS["twitter"] * tw_score +
+                  SENTIMENT_WEIGHTS["news_polarity"] * npol)
+    return max(-100, min(100, oscillator))
+
 
 # ============================================
 # 📊 ANALYZE MARKET (JUMUISHA AI ZOTE)
